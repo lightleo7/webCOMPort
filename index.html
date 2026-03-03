@@ -3,18 +3,11 @@
 
 <head>
 	<meta charset="UTF-8">
-	<meta name="viewwindow.port" content="width=device-width, initial-scale=1.0">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>webPlotter</title>
-	<script src="https://cdn.tailwindcss.com"></script>
+	<link rel="stylesheet" href="./output.css">
 	<!-- for old browsers -->
 	<script>
-		tailwind.config = {
-			darkMode: 'class',
-			theme: {
-				extend: {},
-			},
-		}
-
 		document.addEventListener('DOMContentLoaded', function () {
 			if (localStorage.getItem('theme') === 'dark' ||
 				(!localStorage.getItem('theme') &&
@@ -50,7 +43,6 @@
 				<option>19200</option>
 				<option>31250</option>
 				<option>38400</option>
-				<option>57600</option>
 				<option>57600</option>
 				<option>74880</option>
 				<option>115200</option>
@@ -196,8 +188,8 @@
 		<div class="shadow-md border-gray-300 p-4 rounded-xl">
 			<p class="text-xl text-gray-900 dark:text-white mb-3 font-bold">Информация о подключении</p>
 
-			<p id="connectInfo" class="block mb-2 text-sm font-semibold text-gray-900 dark:text-white">Подключитесь для
-				получения информации</label>
+			
+			<p id="connectInfo" class="block mb-2 text-sm font-semibold text-gray-900 dark:text-white">Подключитесь для получения информации</p>
 		</div>
 	</div>
 	<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>

@@ -2,9 +2,11 @@ if (('serial' in navigator) == false) {
     alert("Ваш браузер не поддерживает Web Serial API. \n\nЕсли у вас Firefox, попробуйте установить стороннее API - https://github.com/kuba2k2/firefox-webserial");
     console.log("Your browser doesn't support Web Serial API");
 }
+
 function baudRate() {
     return parseInt($("#baudRate").val());
 }
+
 function updateConnectInfo() {
     if (connected) {
         $("#status").removeClass("text-red-400");
