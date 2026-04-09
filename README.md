@@ -7,7 +7,7 @@
 
 ### Введение
 
-Приложение доступно по ссылке - https://rand0mRU.github.io/comport
+Приложение доступно по ссылке - https://lightleo7.github.io/comport
 
 Монитор и плоттер для COM порта (последовательного порта), написанный на HTML и JS для работы в браузере.
 
@@ -41,7 +41,7 @@ npm run build
 
 ### Introduction
 
-The application is available at the link - https://rand0mRU.github.io/comport
+The application is available at the link - https://lightleo7.github.io/comport
 
 Monitor and plotter for COM port (serial port), written in HTML and JS for browser operation.
 
