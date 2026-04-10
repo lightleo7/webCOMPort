@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>webPlotter - финальная версия</title>
+    <title>webPlotter</title>
     <link rel="stylesheet" href="./output.css">
     <style>
         .plot-tooltip {
@@ -177,6 +177,17 @@
         let mxLines = 100;
         let buffer = '';
         let currentReader = null;
+
+        function mx_inner(massiv) {
+            let mx = massiv[0][0];
+
+            massiv.forEach((out) => {
+                out.forEach((inn) => {
+                    if (inn > mx) mx = inn;
+                });
+            });
+            return mx;
+        }
         
         const canvas = document.getElementById('canvas');
         let ctx = canvas.getContext('2d');
@@ -267,7 +278,7 @@
                         const y = getY(val);
                         ctx.beginPath();
                         ctx.fillStyle = color;
-                        ctx.arc(x, y, 4, 0, 2 * Math.PI);
+                        ctx.arc(x, y, 3, 0, 2 * Math.PI);
                         ctx.fill();
                         ctx.fillStyle = "white";
                         ctx.beginPath();
@@ -299,12 +310,12 @@
                 if (Math.abs(v) > maxAbs) maxAbs = Math.abs(v);
             }
             if (autoSize && maxAbs > 0) {
-                let target = Math.ceil(maxAbs * 1.25);
+                let target = mx_inner(allData);
                 if (target < 5) target = 20;
-                if (target !== yMax) {
+                
                     yMax = target;
                     $("#ymaxtext").val(yMax);
-                }
+                
             }
             drawPlotter();
         }
