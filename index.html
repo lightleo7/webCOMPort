@@ -169,8 +169,8 @@
         let readingEnabled = true;
         let autoSize = false;
         let showDots = false;          // по умолчанию кружки выключены
-        let xMax = 120;
-        let yMax = 2048;
+        let xMax = 70;
+        let yMax = 1024;
         let allData = [];               // allData[line][index] — значения от старых (0) к новым (length-1)
         let colors = ["#10b981", "#ef4444", "#3b82f6", "#f59e0b", "#8b5cf6", "#ec489a", "#06b6d4"];
         let autoScroll = true, autoShowTime = false, autoNewLine = true, showUserMessages = false;
@@ -244,10 +244,13 @@
                 }
             });
             ctx.font = "13px monospace";
-            ctx.fillStyle = "#6b7280";
-            ctx.fillText(`${yMax}`, 5, getY(yMax)-4);
-            ctx.fillText(`0`, 5, centerY+4);
-            ctx.fillText(`-${yMax}`, 5, getY(-yMax)+12);
+            ctx.fillStyle = "#cbd5e1";
+            // Подписи к линиям сетки (5 штук)
+            ctx.fillText(`${yMax}`, 5, getY(yMax)+12);
+            ctx.fillText(`${yMax/2}`, 5, getY(yMax/2)-4);
+            ctx.fillText(`0`, 5, centerY-4);
+            ctx.fillText(`${-yMax/2}`, 5, getY(-yMax/2)+12);
+            ctx.fillText(`${-yMax}`, 5, getY(-yMax)-4);
             
             // рисуем линии
             for (let lineIdx = 0; lineIdx < allData.length; lineIdx++) {
