@@ -4,6 +4,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>webPlotter</title>
     <link rel="stylesheet" href="./output.css">
     <style>
@@ -168,19 +171,20 @@
         let isPlotter = true;
         let readingEnabled = true;
         let autoSize = false;
-        let showDots = false;          // по умолчанию кружки выключены
+        let showDots = false;
         let xMax = 70;
         let yMax = 1024;
-        let allData = [];               // allData[line][index] — значения от старых (0) к новым (length-1)
+        let allData = [];
         let colors = ["#10b981", "#ef4444", "#3b82f6", "#f59e0b", "#8b5cf6", "#ec489a", "#06b6d4"];
         let autoScroll = true, autoShowTime = false, autoNewLine = true, showUserMessages = false;
         let mxLines = 100;
         let buffer = '';
         let currentReader = null;
+        let readingLoopActive = false;
+        let isClosing = false;
 
         function mx_inner(massiv) {
             let mx = massiv[0][0];
-
             massiv.forEach((out) => {
                 out.forEach((inn) => {
                     if (inn > mx) mx = inn;
@@ -195,6 +199,7 @@
         
         // Переключение чтения
         window.toggleReading = function() {
+            if (isClosing) return;
             readingEnabled = !readingEnabled;
             const btnText = readingEnabled ? "Остановить чтение" : "Продолжить чтение";
             $(".stopRead, .stopReadGlobal, .stopReadMonitor").html(btnText);
@@ -210,7 +215,6 @@
         }
         window.addEventListener('resize', () => { resizeCanvas(); drawPlotter(); });
         
-        // Координаты: слева старые, справа новые
         function getX(idx, total) {
             if (total <= 1) return canvas.width / 2;
             return (idx / (total - 1)) * canvas.width;
@@ -221,7 +225,6 @@
             return centerY - (val * scale);
         }
         
-        // Отрисовка линий (с кружками или без, в зависимости от showDots)
         function drawPlotter() {
             if (!isPlotter || !canvas || !ctx) return;
             if (canvas.width === 0) resizeCanvas();
@@ -232,7 +235,6 @@
             ctx.save();
             ctx.strokeStyle = "#9ca3af";
             ctx.lineWidth = 1;
-            // сетка
             [-yMax, -yMax/2, 0, yMax/2, yMax].forEach(lev => {
                 const y = getY(lev);
                 if (y >= 0 && y <= canvas.height) {
@@ -245,14 +247,12 @@
             });
             ctx.font = "13px monospace";
             ctx.fillStyle = "#cbd5e1";
-            // Подписи к линиям сетки (5 штук)
             ctx.fillText(`${yMax}`, 5, getY(yMax)+12);
             ctx.fillText(`${yMax/2}`, 5, getY(yMax/2)-4);
             ctx.fillText(`0`, 5, centerY-4);
             ctx.fillText(`${-yMax/2}`, 5, getY(-yMax/2)+12);
             ctx.fillText(`${-yMax}`, 5, getY(-yMax)-4);
             
-            // рисуем линии
             for (let lineIdx = 0; lineIdx < allData.length; lineIdx++) {
                 const dataArr = allData[lineIdx];
                 if (!dataArr || dataArr.length < 2) continue;
@@ -272,7 +272,6 @@
                 }
                 ctx.stroke();
                 
-                // рисуем кружки на точках, если включено
                 if (showDots) {
                     for (let i = 0; i < dataArr.length; i++) {
                         const val = dataArr[i];
@@ -293,7 +292,6 @@
             ctx.restore();
         }
         
-        // Добавление точки (график плывёт)
         function addPoint(lineIdx, value) {
             if (!allData[lineIdx]) allData[lineIdx] = [];
             const arr = allData[lineIdx];
@@ -301,7 +299,6 @@
             while (arr.length > xMax) arr.shift();
         }
         
-        // Обработка чисел с автошкалой
         function processNumbers(ints) {
             if (!ints.length) return;
             if (ints.length < allData.length) allData.length = ints.length;
@@ -315,15 +312,12 @@
             if (autoSize && maxAbs > 0) {
                 let target = mx_inner(allData);
                 if (target < 5) target = 20;
-                
-                    yMax = target;
-                    $("#ymaxtext").val(yMax);
-                
+                yMax = target;
+                $("#ymaxtext").val(yMax);
             }
             drawPlotter();
         }
         
-        // Монитор порта с циклическим смещением
         let monitorLines = [];
         
         function addMonitorText(data) {
@@ -342,21 +336,147 @@
             }
         }
         
-        // ---------- WEBSERIAL ----------
-        async function connectSerial() {
+        // Проверка существующего порта при загрузке
+        async function checkExistingPort() {
             try {
+                if (!navigator.serial) return;
+                const ports = await navigator.serial.getPorts();
+                if (ports.length > 0) {
+                    console.log("Найден существующий порт, закрываем...");
+                    for (const port of ports) {
+                        try {
+                            if (port.readable || port.writable) {
+                                if (port.readable) {
+                                    const reader = port.readable.getReader();
+                                    await reader.cancel();
+                                    reader.releaseLock();
+                                }
+                                await port.close();
+                                console.log("Порт успешно закрыт");
+                            }
+                        } catch (e) {
+                            console.warn("Ошибка при закрытии порта:", e);
+                        }
+                    }
+                }
+            } catch (err) {
+                console.warn("Не удалось проверить порты:", err);
+            }
+        }
+        
+        // Перехват перезагрузки страницы
+        window.addEventListener('beforeunload', async () => {
+            console.log("Страница перезагружается, закрываем порт...");
+            isClosing = true;
+            readingEnabled = false;
+            
+            if (currentReader) {
+                try {
+                    await currentReader.cancel();
+                    currentReader.releaseLock();
+                } catch(e) {}
+                currentReader = null;
+            }
+            
+            if (window.port) {
+                try {
+                    if (window.port.readable) {
+                        const reader = window.port.readable.getReader();
+                        await reader.cancel();
+                        reader.releaseLock();
+                    }
+                    await window.port.close();
+                } catch(e) {
+                    console.warn("Ошибка при закрытии порта:", e);
+                }
+                window.port = null;
+            }
+            
+            connected = false;
+        });
+        
+        async function startReadingLoop() {
+            if (!connected || readingLoopActive || isClosing) return;
+            if (!window.port?.readable) return;
+            
+            readingLoopActive = true;
+            
+            if (currentReader) {
+                try { 
+                    await currentReader.cancel(); 
+                } catch(e) {}
+                currentReader = null;
+            }
+            
+            while (connected && window.port?.readable && !isClosing && !window.closed) {
+                try {
+                    currentReader = window.port.readable.getReader();
+                    while (connected && !isClosing && !window.closed) {
+                        try {
+                            const { value, done } = await currentReader.read();
+                            if (done) break;
+                            if (readingEnabled && !isClosing) {
+                                buffer += new TextDecoder().decode(value);
+                                const lines = buffer.split('\n');
+                                buffer = lines.pop() || '';
+                                for (let line of lines) {
+                                    line = line.replace('\r', '').trim();
+                                    if (line === "") continue;
+                                    const nums = line.match(/-?\d+/g);
+                                    if (nums && nums.length) processNumbers(nums.map(Number));
+                                    addMonitorText(line);
+                                }
+                            }
+                        } catch (readErr) {
+                            console.log("Ошибка чтения:", readErr);
+                            break;
+                        }
+                    }
+                } catch (err) {
+                    console.log("Ошибка в цикле чтения:", err);
+                    await new Promise(r => setTimeout(r, 100));
+                } finally {
+                    if (currentReader) {
+                        try { 
+                            currentReader.releaseLock(); 
+                        } catch(e) {}
+                        currentReader = null;
+                    }
+                }
+                
+                if (connected && (!window.port || !window.port.readable)) {
+                    console.log("Порт потерян, выходим из цикла");
+                    break;
+                }
+            }
+            
+            readingLoopActive = false;
+        }
+        
+        async function connectSerial() {
+            if (isClosing) return;
+            try {
+                if (window.port) {
+                    await disconnectSerial();
+                    await new Promise(r => setTimeout(r, 100));
+                }
+                
                 window.port = await navigator.serial.requestPort();
                 await window.port.open({ baudRate: parseInt($("#baudRate").val()) });
                 connected = true;
+                isClosing = false;
                 updateUI();
                 readingEnabled = true;
+                readingLoopActive = false;
                 $(".stopRead, .stopReadGlobal, .stopReadMonitor").html("Остановить чтение");
                 allData = [];
                 monitorLines = [];
                 $("#port").val('');
                 drawPlotter();
-                startReadingLoop();
+                
+                setTimeout(() => startReadingLoop(), 100);
             } catch (err) {
+                console.error("Ошибка подключения:", err);
                 alert("Ошибка: " + err.message);
                 connected = false;
                 updateUI();
@@ -364,59 +484,41 @@
         }
         
         async function disconnectSerial() {
+            isClosing = true;
             readingEnabled = false;
+            readingLoopActive = false;
+            
             if (currentReader) {
-                try { await currentReader.cancel(); } catch(e) {}
-                currentReader = null;
-            }
-            if (window.port) {
-                try { await window.port.close(); } catch(e) {}
-            }
-            connected = false;
-            updateUI();
-        }
-        
-        async function startReadingLoop() {
-            if (!window.port?.readable) return;
-            if (currentReader) {
-                try { await currentReader.cancel(); } catch(e) {}
+                try { 
+                    await currentReader.cancel(); 
+                } catch(e) {}
+                try { 
+                    currentReader.releaseLock(); 
+                } catch(e) {}
                 currentReader = null;
             }
             
-            while (connected && window.port?.readable) {
+            if (window.port) {
                 try {
-                    currentReader = window.port.readable.getReader();
-                    while (connected) {
-                        const { value, done } = await currentReader.read();
-                        if (done) break;
-                        if (readingEnabled) {
-                            buffer += new TextDecoder().decode(value);
-                            const lines = buffer.split('\n');
-                            buffer = lines.pop() || '';
-                            for (let line of lines) {
-                                line = line.replace('\r', '').trim();
-                                if (line === "") continue;
-                                const nums = line.match(/-?\d+/g);
-                                if (nums && nums.length) processNumbers(nums.map(Number));
-                                addMonitorText(line);
-                            }
-                        }
+                    if (window.port.readable) {
+                        const reader = window.port.readable.getReader();
+                        try { await reader.cancel(); } catch(e) {}
+                        try { reader.releaseLock(); } catch(e) {}
                     }
-                } catch (err) {
-                    console.log("Ошибка чтения, перезапуск...", err);
-                    await new Promise(r => setTimeout(r, 100));
-                } finally {
-                    if (currentReader) {
-                        try { currentReader.releaseLock(); } catch(e) {}
-                        currentReader = null;
-                    }
+                    await window.port.close();
+                } catch(e) {
+                    console.warn("Ошибка при закрытии порта:", e);
                 }
-                if (connected && !window.port?.readable) break;
+                window.port = null;
             }
+            
+            connected = false;
+            isClosing = false;
+            updateUI();
         }
         
         async function writeSerial(msg) {
-            if (!window.port?.writable) return;
+            if (!window.port?.writable || isClosing) return;
             const writer = window.port.writable.getWriter();
             try {
                 await writer.write(new TextEncoder().encode(msg));
@@ -426,7 +528,7 @@
         }
         
         function updateUI() {
-            if (connected) {
+            if (connected && !isClosing) {
                 $("#status").removeClass("text-red-400").addClass("text-green-400").text("[Подключено]");
                 const info = window.port.getInfo?.() || {};
                 $("#connectInfo").html(`Подключено<br>Время: ${new Date().toLocaleTimeString()}<br>Скорость: ${$("#baudRate").val()} бод<br>VID:${info.usbVendorId || '?'} PID:${info.usbProductId || '?'}`);
@@ -438,7 +540,6 @@
             }
         }
         
-        // ---------- ТУЛТИПЫ НА ВЕРШИНАХ ----------
         function findNearestVertex(mouseX, mouseY) {
             const ACTIVATION_RADIUS = 8;
             let bestDist = ACTIVATION_RADIUS + 1;
@@ -501,6 +602,10 @@
         
         // ---------- ИНИЦИАЛИЗАЦИЯ ИНТЕРФЕЙСА ----------
         $(function() {
+            checkExistingPort().then(() => {
+                console.log("Готово к работе");
+            });
+            
             resizeCanvas();
             $("#xmaxtext").val(xMax);
             $("#ymaxtext").val(yMax);
@@ -509,7 +614,7 @@
             $("#showdots").prop("checked", showDots);
             
             $("#ctrlBtn").click(async () => {
-                if (connected) await disconnectSerial();
+                if (connected && !isClosing) await disconnectSerial();
                 else await connectSerial();
             });
             $("#sendMessage").click(async () => {
@@ -571,4 +676,5 @@
         });
     </script>
 </body>
+
 </html>
