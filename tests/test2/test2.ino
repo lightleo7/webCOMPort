@@ -14,12 +14,9 @@ void serial_printf(const char *format, ...) {
 }
 
 void setup() {
-  // put your setup code here, to run once:
-  Serial.begin(9600);
+    Serial.begin(9600);
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
-  serial_printf("%ld, %ld, %ld\n", random(1024), random(1024), random(1024));
-  delay(100);
+    serial_printf("just a str\nrand: %ld\n", random(1024)); delay(1);
 }

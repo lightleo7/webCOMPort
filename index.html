@@ -60,6 +60,21 @@
         #port {
             color: #1f2937;
         }
+
+        .settings-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        hr.settings-divider {
+            margin: 0.75rem 0;
+            border-color: #e5e7eb;
+        }
+        .dark hr.settings-divider {
+            border-color: #4b5563;
+        }
     </style>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
@@ -140,7 +155,7 @@
             <ul class="flex flex-wrap text-sm font-semibold text-center text-gray-400 mb-3">
                 <li class="me-2"><a href="#canvas"
                         class="inline-block px-4 py-3 text-white bg-blue-600 rounded-lg active">Плоттер</a></li>
-                <li class="me-2"><a href=""
+                <li class="me-2"><a href="#"
                         class="monPortActivate inline-block px-4 py-3 rounded-lg hover:text-gray-900 dark:hover:text-white">Монитор
                         порта</a></li>
                 <div class="absolute right-0 pe-3">
@@ -154,18 +169,31 @@
                 style="min-height: 400px;"></canvas>
             <div class="shadow-md border-gray-300 p-3 rounded-xl bg-white dark:bg-gray-800">
                 <p class="text-xl text-gray-900 dark:text-white mb-3 font-bold">Настройки</p>
-                <div class="flex items-center mb-4">
-                    <input id="autosize" type="checkbox"
-                        class="w-4 h-4 text-blue-600 rounded-sm focus:ring-blue-600 bg-gray-300 border-gray-600">
-                    <label for="autosize"
-                        class="ms-2 text-sm font-semibold text-gray-900 dark:text-gray-300">Автомасштабирование</label>
+                
+                <div class="settings-group">
+                    <div class="flex items-center">
+                        <input id="autosize" type="checkbox"
+                            class="w-4 h-4 text-blue-600 rounded-sm focus:ring-blue-600 bg-gray-300 border-gray-600">
+                        <label for="autosize"
+                            class="ms-2 text-sm font-semibold text-gray-900 dark:text-gray-300">Автомасштабирование</label>
+                    </div>
+                    <div class="flex items-center">
+                        <input id="showdots" type="checkbox"
+                            class="w-4 h-4 text-blue-600 rounded-sm focus:ring-blue-600 bg-gray-300 border-gray-600">
+                        <label for="showdots" class="ms-2 text-sm font-semibold text-gray-900 dark:text-gray-300">Показывать
+                            кружки на точках (может влиять на производительность)</label>
+                    </div>
                 </div>
+
                 <div class="flex items-center mb-4">
-                    <input id="showdots" type="checkbox"
+                    <input id="onlyCirclesMode" type="checkbox"
                         class="w-4 h-4 text-blue-600 rounded-sm focus:ring-blue-600 bg-gray-300 border-gray-600">
-                    <label for="showdots" class="ms-2 text-sm font-semibold text-gray-900 dark:text-gray-300">Показывать
-                        кружки на точках (может влиять на производительность)</label>
+                    <label for="onlyCirclesMode" class="ms-2 text-sm font-semibold text-gray-900 dark:text-gray-300">
+                        Только кружки (отключает линии)
+                    </label>
                 </div>
+                <hr class="settings-divider">
+
                 <div class="mb-1">
                     <label for="xmaxtext"
                         class="block mb-2 text-sm font-semibold text-gray-900 dark:text-white">Количество точек
@@ -238,6 +266,7 @@
         let readingEnabled = true;
         let autoSize = false;
         let showDots = false;
+        let onlyCirclesMode = false;
         let xMax = 70;
         let yMax = 1024;
         let allData = [];
@@ -267,7 +296,6 @@
             return mx;
         }
 
-
         function mn_inner(massiv) {
             let mn = massiv[0][0];
             massiv.forEach((out) => {
@@ -282,7 +310,6 @@
         let ctx = canvas.getContext('2d');
         const tooltipDiv = document.getElementById('tooltip');
 
-        // Переключение чтения
         window.toggleReading = function () {
             if (isClosing) return;
             readingEnabled = !readingEnabled;
@@ -340,24 +367,46 @@
 
             for (let lineIdx = 0; lineIdx < allData.length; lineIdx++) {
                 const dataArr = allData[lineIdx];
-                if (!dataArr || dataArr.length < 2) continue;
+                if (!dataArr || dataArr.length < 2) {
+                    if (onlyCirclesMode && dataArr && dataArr.length >= 1 && showDots) {
+                        const color = colors[lineIdx % colors.length];
+                        for (let i = 0; i < dataArr.length; i++) {
+                            const val = dataArr[i];
+                            if (isNaN(val)) continue;
+                            const x = getX(i, dataArr.length);
+                            const y = getY(val);
+                            ctx.beginPath();
+                            ctx.fillStyle = color;
+                            ctx.arc(x, y, 3, 0, 2 * Math.PI);
+                            ctx.fill();
+                            ctx.fillStyle = "white";
+                            ctx.beginPath();
+                            ctx.arc(x, y, 2, 0, 2 * Math.PI);
+                            ctx.fill();
+                        }
+                    }
+                    continue;
+                }
                 const color = colors[lineIdx % colors.length];
 
-                ctx.beginPath();
-                ctx.strokeStyle = color;
-                ctx.lineWidth = 2;
-                let first = true;
-                for (let i = 0; i < dataArr.length; i++) {
-                    const val = dataArr[i];
-                    if (isNaN(val)) continue;
-                    const x = getX(i, dataArr.length);
-                    const y = getY(val);
-                    if (first) { ctx.moveTo(x, y); first = false; }
-                    else ctx.lineTo(x, y);
+                if (!onlyCirclesMode) {
+                    ctx.beginPath();
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 2;
+                    let first = true;
+                    for (let i = 0; i < dataArr.length; i++) {
+                        const val = dataArr[i];
+                        if (isNaN(val)) continue;
+                        const x = getX(i, dataArr.length);
+                        const y = getY(val);
+                        if (first) { ctx.moveTo(x, y); first = false; }
+                        else ctx.lineTo(x, y);
+                    }
+                    ctx.stroke();
                 }
-                ctx.stroke();
 
-                if (showDots) {
+                const shouldDrawCircles = showDots || onlyCirclesMode;
+                if (shouldDrawCircles) {
                     for (let i = 0; i < dataArr.length; i++) {
                         const val = dataArr[i];
                         if (isNaN(val)) continue;
@@ -423,7 +472,6 @@
             }
         }
 
-        // Проверка существующего порта при загрузке
         async function checkExistingPort() {
             try {
                 if (!navigator.serial) return;
@@ -453,9 +501,7 @@
 
         async function disconnectSerial(manual = true) {
             if (isClosing && manual) return;
-
             if (!manual && !connected) return;
-
             if (!manual && !disconnectOnBlur) return;
 
             isClosing = true;
@@ -491,7 +537,6 @@
             updateUI();
         }
 
-        // Перехват перезагрузки страницы
         window.addEventListener('beforeunload', async () => {
             console.log("Страница перезагружается, закрываем порт...");
             isClosing = true;
@@ -708,7 +753,6 @@
         canvas.addEventListener('mousemove', onCanvasMove);
         canvas.addEventListener('mouseleave', onCanvasLeave);
 
-        // ---------- ИНИЦИАЛИЗАЦИЯ ИНТЕРФЕЙСА ----------
         $(function () {
             checkExistingPort().then(() => {
                 console.log("Готово к работе");
@@ -720,9 +764,33 @@
             $("#mxlines").val(mxLines);
             $("#autosize").prop("checked", autoSize);
             $("#showdots").prop("checked", showDots);
+            $("#onlyCirclesMode").prop("checked", onlyCirclesMode);
 
             $("#disconnectOnBlur").prop("checked", false);
             disconnectOnBlur = false;
+
+            $("#onlyCirclesMode").change(function(e) {
+                onlyCirclesMode = e.target.checked;
+                if (onlyCirclesMode) {
+                    if (!$("#showdots").prop("checked")) {
+                        $("#showdots").prop("checked", true);
+                        showDots = true;
+                    }
+                    $("#showdots").prop("disabled", true);
+                } else {
+                    $("#showdots").prop("disabled", false);
+                }
+                drawPlotter();
+            });
+
+            $("#showdots").change(function(e) {
+                if (onlyCirclesMode) {
+                    $(this).prop("checked", true);
+                    return;
+                }
+                showDots = e.target.checked;
+                drawPlotter();
+            });
 
             $("#ctrlBtn").click(async () => {
                 if (connected && !isClosing) await disconnectSerial(true);
@@ -746,11 +814,6 @@
                     yMax = parseInt($("#ymaxtext").val()) || 2048;
                     drawPlotter();
                 }
-            });
-
-            $("#showdots").change(e => {
-                showDots = e.target.checked;
-                drawPlotter();
             });
 
             $("#xmaxtext, #ymaxtext").change(() => {

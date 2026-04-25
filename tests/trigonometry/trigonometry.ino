@@ -13,14 +13,14 @@ void serial_printf(const char *format, ...) {
     Serial.print(buffer);
 }
 
-
 void setup() {
     Serial.begin(9600);
 }
 
 void loop() {
     for (int i = -180; i <= 180; i++) {
-        serial_printf("sin: %d, cos: %d, tg: %d\n", (int) (sin((float)i * (PI / 180.0)) * 100),
+        serial_printf("sin: %ld, cos: %ld, tg: %ld\n", 
+                    (int) (sin((float)i * (PI / 180.0)) * 100),
                     max(min((int) ((tan((float)i * (PI / 180.0)) * 100)) -512, 0), -1024),
                     (int) (cos((float)i * (PI / 180.0)) * 100) + 512);
     }
