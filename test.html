@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>webPlotter Pro | Монитор порта + Плоттер</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        'sans': ['Inter', 'system-ui', 'sans-serif'],
+                        'mono': ['JetBrains Mono', 'Fira Code', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        /* Плавные переходы для темы */
+        body, .glass-card, canvas, input, select, textarea, button {
+            transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .plot-tooltip {
+            position: fixed;
+            background: rgba(0, 0, 0, 0.95);
+            backdrop-filter: blur(12px);
+            color: #f0f0f0;
+            padding: 8px 14px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            pointer-events: none;
+            z-index: 9999;
+            border-left: 3px solid;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            white-space: nowrap;
+            letter-spacing: 0.3px;
+        }
+
+        .plot-tooltip.hidden {
+            display: none;
+        }
+
+        canvas {
+            cursor: crosshair;
+            display: block;
+            width: 100%;
+            height: auto;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2);
+        }
+
+        /* Оптимизированный скролл */
+        textarea#port {
+            scrollbar-width: thin;
+        }
+
+        textarea#port::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        textarea#port::-webkit-scrollbar-track {
+            background: #1e293b;
+            border-radius: 10px;
+        }
+
+        textarea#port::-webkit-scrollbar-thumb {
+            background: #3b82f6;
+            border-radius: 10px;
+        }
+
+        /* Кастомные кнопки */
+        .btn-primary {
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            transition: all 0.15s ease;
+        }
+
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #2563eb, #1d4ed8);
+            transform: translateY(-1px);
+        }
+
+        .btn-primary:active {
+            transform: translateY(0px);
+        }
+
+        .btn-secondary {
+            background: rgba(51, 65, 85, 0.8);
+            transition: all 0.15s ease;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(71, 85, 105, 0.9);
+            transform: translateY(-1px);
+        }
+
+        /* Адаптивные карточки */
+        .glass-card {
+            backdrop-filter: blur(8px);
+            transition: all 0.2s ease;
+        }
+
+        /* Тёмная тема */
+        .dark .glass-card {
+            background: rgba(30, 41, 59, 0.6);
+            border: 1px solid rgba(71, 85, 105, 0.4);
+        }
+
+        /* Светлая тема */
+        .light .glass-card {
+            background: rgba(255, 255, 255, 0.85);
+            border: 1px solid rgba(203, 213, 225, 0.6);
+        }
+
+        .light body {
+            background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%);
+        }
+
+        .dark body {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+        }
+
+        /* Оптимизация анимаций вкладок */
+        .tab-active {
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            color: white;
+            box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+        }
+
+        .tab-inactive {
+            background: rgba(51, 65, 85, 0.5);
+            color: #94a3b8;
+        }
+
+        .tab-inactive:hover {
+            background: rgba(51, 65, 85, 0.7);
+            color: #e2e8f0;
+        }
+
+        /* Улучшенный инпут фокус */
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            ring: 2px solid #3b82f6;
+        }
+
+        /* Кнопка темы */
+        .theme-toggle {
+            cursor: pointer;
+            transition: transform 0.2s ease;
+        }
+        .theme-toggle:hover {
+            transform: scale(1.05);
+        }
+    </style>
+</head>
+
+<body class="min-h-screen transition-colors duration-200">
+    
+    <!-- Главный контейнер -->
+    <div class="max-w-[1600px] mx-auto px-3 md:px-5 py-4 md:py-6">
+        
+        <!-- Верхняя панель -->
+        <div class="glass-card rounded-xl shadow-lg mb-5 p-4">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <div class="flex items-center gap-3">
+                    <div class="bg-blue-500/20 p-2 rounded-lg">
+                        <i class="fas fa-microchip text-blue-400 text-xl md:text-2xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-xl md:text-2xl font-bold tracking-tight dark:text-white text-slate-800">webPlotter <span class="text-blue-500">Pro</span></h1>
+                        <p class="text-xs md:text-sm dark:text-slate-400 text-slate-600">Монитор порта + плоттер данных</p>
+                    </div>
+                </div>
+                
+                <div class="flex items-center gap-2 flex-wrap">
+                    <!-- Кнопка переключения темы -->
+                    <button id="themeToggle" class="theme-toggle p-2 rounded-lg dark:bg-slate-700 bg-slate-200 dark:text-yellow-400 text-slate-600">
+                        <i id="themeIcon" class="fas fa-moon"></i>
+                    </button>
+                    
+                    <div id="status" class="px-3 py-1.5 rounded-full text-xs md:text-sm font-semibold flex items-center gap-1.5 dark:bg-red-500/20 bg-red-100 dark:text-red-300 text-red-600">
+                        <i class="fas fa-circle text-[6px] md:text-[8px]"></i>
+                        <span>Отключено</span>
+                    </div>
+                    
+                    <select id="baudRate" class="dark:bg-slate-800 bg-white border dark:border-slate-600 border-slate-300 dark:text-white text-slate-800 rounded-lg px-3 py-1.5 text-sm focus:ring-1 focus:ring-blue-500">
+                        <option>300</option><option>600</option><option>750</option><option>1200</option>
+                        <option>2400</option><option>4800</option><option selected>9600</option>
+                        <option>19200</option><option>31250</option><option>38400</option><option>57600</option>
+                        <option>74880</option><option>115200</option><option>230400</option><option>250000</option>
+                    </select>
+                    
+                    <button type="button" id="ctrlBtn" class="btn-primary text-white font-semibold rounded-lg px-4 py-1.5 text-sm flex items-center gap-1.5">
+                        <i class="fas fa-plug text-xs"></i> Подключить
+                    </button>
+                    
+                    <button type="button" onclick="if (window.toggleReading) window.toggleReading()" class="stopRead btn-secondary text-white font-semibold rounded-lg px-4 py-1.5 text-sm flex items-center gap-1.5">
+                        <i class="fas fa-pause text-xs"></i> Пауза
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Табы -->
+        <div class="mb-4">
+            <ul class="flex flex-wrap gap-2 text-sm font-semibold">
+                <li>
+                    <a href="#" class="plotterTab inline-block px-5 py-2 rounded-lg transition-all duration-200 dark:bg-blue-600 bg-blue-500 dark:text-white text-white shadow-md">
+                        <i class="fas fa-chart-line mr-1.5"></i> Плоттер
+                    </a>
+                </li>
+                <li>
+                    <a href="#" class="monPortTab inline-block px-5 py-2 rounded-lg transition-all duration-200 dark:bg-slate-700 dark:text-slate-300 bg-slate-200 text-slate-600 hover:dark:bg-slate-600 hover:bg-slate-300">
+                        <i class="fas fa-terminal mr-1.5"></i> Монитор порта
+                    </a>
+                </li>
+                <li class="ml-auto hidden md:block">
+                    <button type="button" onclick="if(window.toggleReading) window.toggleReading()" class="stopReadGlobal btn-secondary text-white font-semibold rounded-lg px-4 py-2 text-sm flex items-center gap-1.5">
+                        <i class="fas fa-stop-circle"></i> Остановить чтение
+                    </button>
+                </li>
+            </ul>
+        </div>
+        
+        <!-- Плоттер -->
+        <div id="plotter" class="transition-all duration-200">
+            <div class="glass-card rounded-xl p-4 mb-5">
+                <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+                    <div class="flex items-center gap-2">
+                        <i class="fas fa-chart-scatter text-blue-400 text-lg"></i>
+                        <h2 class="text-lg md:text-xl font-bold dark:text-white text-slate-800">График данных</h2>
+                    </div>
+                    <div class="text-xs dark:text-slate-400 text-slate-500 font-mono">
+                        <i class="fas fa-mouse-pointer"></i> наведите на точку
+                    </div>
+                </div>
+                <canvas class="bg-light-300 dark:bg-dark-600" id="canvas" style="height: 480px; width: 100%; border-radius: 12px;"></canvas>
+            </div>
+            
+            <!-- Настройки плоттера -->
+            <div class="glass-card rounded-xl p-4">
+                <div class="flex items-center gap-2 mb-4">
+                    <i class="fas fa-sliders-h text-blue-400"></i>
+                    <h3 class="text-base font-bold dark:text-white text-slate-800">Настройки плоттера</h3>
+                </div>
+                
+                <!-- Галочки в одну строку -->
+                <div class="flex flex-wrap gap-4 mb-4">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input id="autosize" type="checkbox" class="w-4 h-4 rounded">
+                        <span class="text-sm dark:text-slate-200 text-slate-700">Автомасштабирование</span>
+                    </label>
+                    
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input id="showdots" type="checkbox" class="w-4 h-4 rounded">
+                        <span class="text-sm dark:text-slate-200 text-slate-700">Показывать кружки на точках (может влиять на производительность)</span>
+                    </label>
+                    
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input id="onlyCirclesMode" type="checkbox" class="w-4 h-4 rounded">
+                        <span class="text-sm dark:text-slate-200 text-slate-700">Только кружки (отключает линии)</span>
+                    </label>
+                </div>
+                
+                <!-- Инпуты на новых строках -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-semibold dark:text-slate-300 text-slate-700 mb-1">Количество точек (память)</label>
+                        <input type="number" id="xmaxtext" class="w-full dark:bg-slate-800 dark:border-slate-600 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500 bg-white border border-slate-300 text-slate-900 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-semibold dark:text-slate-300 text-slate-700 mb-1">Диапазон Y (значение)</label>
+                        <input type="number" id="ymaxtext" class="w-full dark:bg-slate-800 dark:border-slate-600 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500 bg-white border border-slate-300 text-slate-900 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Монитор порта -->
+        <div id="monport" style="display: none;" class="transition-all duration-200">
+            <div class="glass-card rounded-xl p-4 mb-5">
+                <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+                    <div class="flex items-center gap-2">
+                        <i class="fas fa-tty text-green-400 text-lg"></i>
+                        <h2 class="text-lg md:text-xl font-bold dark:text-white text-slate-800">Монитор порта</h2>
+                    </div>
+                    <button onclick="if(window.toggleReading) window.toggleReading()" class="stopReadMonitor btn-secondary text-white text-xs px-3 py-1.5 rounded-lg md:hidden">
+                        <i class="fas fa-pause"></i> Пауза
+                    </button>
+                </div>
+                
+                <textarea id="port" rows="12" class="w-full dark:bg-slate-900 bg-white border dark:border-slate-600 border-slate-300 rounded-lg dark:text-white text-slate-800 font-mono text-sm p-3 focus:ring-1 focus:ring-blue-500" 
+                    placeholder="Данные с порта..." spellcheck="false" style="min-height: 400px;"></textarea>
+            </div>
+            
+            <!-- Настройки монитора -->
+            <!-- Настройки монитора -->
+            <div class="glass-card rounded-xl p-4">
+                <div class="flex items-center gap-2 mb-4">
+                    <i class="fas fa-cog text-green-400"></i>
+                    <h3 class="text-base font-bold dark:text-white text-slate-800">Настройки монитора</h3>
+                </div>
+                
+                <!-- Галочки в одну строку -->
+                <div class="flex flex-wrap gap-4 mb-4">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input id="autoscroll" type="checkbox" checked class="w-4 h-4 rounded">
+                        <span class="text-sm dark:text-slate-200 text-slate-700">Автопрокрутка</span>
+                    </label>
+                    
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input id="showusermessages" type="checkbox" class="w-4 h-4 rounded">
+                        <span class="text-sm dark:text-slate-200 text-slate-700">Показывать мои сообщения</span>
+                    </label>
+                    
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input id="autoshowtime" type="checkbox" class="w-4 h-4 rounded">
+                        <span class="text-sm dark:text-slate-200 text-slate-700">Показывать время</span>
+                    </label>
+                    
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input id="autonewline" type="checkbox" checked class="w-4 h-4 rounded">
+                        <span class="text-sm dark:text-slate-200 text-slate-700">Автоперенос строки</span>
+                    </label>
+                </div>
+                
+                <!-- Инпут на новой строке -->
+                <div>
+                    <label class="block text-sm font-semibold dark:text-slate-300 text-slate-700 mb-1">Максимум строк</label>
+                    <input type="number" id="mxlines" class="w-full max-w-[200px] dark:bg-slate-800 dark:border-slate-600 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500 bg-white border border-slate-300 text-slate-900 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
+                </div>
+            </div>
+        </div>
+        
+        <!-- Отправка сообщений -->
+        <div class="glass-card rounded-xl p-4 mt-5">
+            <div class="flex items-center gap-2 mb-3">
+                <i class="fas fa-paper-plane text-purple-400"></i>
+                <h3 class="text-base font-bold dark:text-white text-slate-800">Отправка данных</h3>
+            </div>
+            
+            <div class="flex flex-wrap gap-2">
+                <input type="text" id="message" placeholder="Введите данные..." spellcheck="false"
+                    class="flex-1 min-w-[180px] dark:bg-slate-800 bg-white border dark:border-slate-600 border-slate-300 dark:text-white text-slate-800 rounded-lg px-4 py-2 text-sm focus:ring-1 focus:ring-blue-500" />
+                
+                <select id="addToMsg" class="dark:bg-slate-800 bg-white dark:text-white border dark:border-slate-600 border-slate-300 rounded-lg px-3 py-2 text-sm">
+                    <option selected>Нет конца строки</option>
+                    <option>Новая строка (\n)</option>
+                    <option>Возврат каретки (\r)</option>
+                    <option>Новая строка и возврат каретки (\r\n)</option>
+                </select>
+                
+                <button type="button" id="sendMessage" class="btn-primary text-white font-semibold rounded-lg px-5 py-2 text-sm flex items-center gap-1.5">
+                    <i class="fas fa-location-arrow text-xs"></i> Отправить
+                </button>
+                
+                <button type="button" id="clsMessage" class="btn-secondary text-white font-semibold rounded-lg px-5 py-2 text-sm flex items-center gap-1.5">
+                    <i class="fas fa-eraser text-xs"></i> Очистить
+                </button>
+            </div>
+        </div>
+        
+        <!-- Информация -->
+        <div class="glass-card rounded-xl p-3 mt-4">
+            <div class="flex items-center gap-2">
+                <i class="fas fa-info-circle text-blue-400 text-sm"></i>
+                <p id="connectInfo" class="text-xs dark:text-slate-300 text-slate-600 font-mono">Подключитесь для получения информации</p>
+            </div>
+        </div>
+    </div>
+    
+    <div id="tooltip" class="plot-tooltip hidden"></div>
+    
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script>
+        // ========== ВСЯ ЛОГИКА СОХРАНЕНА ПОЛНОСТЬЮ ==========
+        let connected = false;
+        let isPlotter = true;
+        let readingEnabled = true;
+        let autoSize = false;
+        let showDots = false;
+        let onlyCirclesMode = false;
+        let xMax = 70;
+        let yMax = 1024;
+        let allData = [];
+        let colors = ["#10b981", "#ef4444", "#3b82f6", "#f59e0b", "#8b5cf6", "#ec489a", "#06b6d4"];
+        let autoScroll = true, autoShowTime = false, autoNewLine = true, showUserMessages = false;
+        let mxLines = 100;
+        let buffer = '';
+        let currentReader = null;
+        let readingLoopActive = false;
+        let isClosing = false;
+        let disconnectOnBlur = false;
+        let animationFrameId = null;
+
+        function max(a, b) { return a > b ? a : b; }
+        function abs(a) { return a < 0 ? -a : a; }
+
+        function mx_inner(massiv) {
+            let mx = massiv[0][0];
+            massiv.forEach((out) => { out.forEach((inn) => { if (inn > mx) mx = inn; }); });
+            return mx;
+        }
+        function mn_inner(massiv) {
+            let mn = massiv[0][0];
+            massiv.forEach((out) => { out.forEach((inn) => { if (inn < mn) mn = inn; }); });
+            return mn;
+        }
+
+        const canvas = document.getElementById('canvas');
+        let ctx = canvas.getContext('2d');
+        const tooltipDiv = document.getElementById('tooltip');
+
+        window.toggleReading = function () {
+            if (isClosing) return;
+            readingEnabled = !readingEnabled;
+            const text = readingEnabled ? "Остановить чтение" : "Продолжить чтение";
+            const icon = readingEnabled ? '<i class="fas fa-pause text-xs"></i>' : '<i class="fas fa-play text-xs"></i>';
+            $(".stopRead, .stopReadGlobal, .stopReadMonitor").html(icon + ' ' + (readingEnabled ? 'Пауза' : 'Старт'));
+        };
+
+        // Оптимизированный resize с debounce
+        let resizeTimeout;
+        function resizeCanvas() {
+            if (!canvas) return;
+            const container = canvas.parentElement;
+            const newWidth = container.clientWidth - 24;
+            const newHeight = 480;
+            if (canvas.width !== newWidth) {
+                canvas.width = newWidth;
+                canvas.height = newHeight;
+                drawPlotter();
+            }
+        }
+        
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(() => { resizeCanvas(); drawPlotter(); }, 100);
+        });
+
+        function getX(idx, total) {
+            if (total <= 1) return canvas.width / 2;
+            return (idx / (total - 1)) * canvas.width;
+        }
+        function getY(val) {
+            const centerY = canvas.height / 2;
+            const scale = canvas.height / (yMax * 2);
+            return centerY - (val * scale);
+        }
+
+        // Оптимизированная отрисовка
+        function drawPlotter() {
+            if (!isPlotter || !canvas || !ctx || canvas.width === 0) return;
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            if (canvas.width === 0) return;
+            
+            const centerY = canvas.height / 2;
+            ctx.save();
+            
+            // Сетка
+            ctx.strokeStyle = "#334155";
+            ctx.lineWidth = 0.8;
+            [-yMax, -yMax / 2, 0, yMax / 2, yMax].forEach(lev => {
+                const y = getY(lev);
+                if (y >= 0 && y <= canvas.height) {
+                    ctx.beginPath();
+                    ctx.moveTo(0, y);
+                    ctx.lineTo(canvas.width, y);
+                    ctx.stroke();
+                }
+            });
+            
+            ctx.font = "10px 'JetBrains Mono', monospace";
+            ctx.fillStyle = "#94a3b8";
+            ctx.fillText(`${yMax}`, 3, getY(yMax) + 10);
+            ctx.fillText(`${yMax/2}`, 3, getY(yMax/2) + 12);
+            ctx.fillText(`0`, 3, centerY - 3);
+            ctx.fillText(`${-yMax/2}`, 3, getY(-yMax/2) - 5);
+            ctx.fillText(`${-yMax}`, 3, getY(-yMax) - 3);
+            
+            // Отрисовка линий и точек
+            for (let lineIdx = 0; lineIdx < allData.length; lineIdx++) {
+                const dataArr = allData[lineIdx];
+                if (!dataArr || dataArr.length === 0) continue;
+                
+                const color = colors[lineIdx % colors.length];
+                const len = dataArr.length;
+                
+                if (!onlyCirclesMode && len > 1) {
+                    ctx.beginPath();
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 2;
+                    let first = true;
+                    for (let i = 0; i < len; i++) {
+                        const val = dataArr[i];
+                        if (isNaN(val)) continue;
+                        const x = getX(i, len);
+                        const y = getY(val);
+                        if (first) { ctx.moveTo(x, y); first = false; }
+                        else ctx.lineTo(x, y);
+                    }
+                    ctx.stroke();
+                }
+                
+                if (showDots || onlyCirclesMode) {
+                    for (let i = 0; i < len; i++) {
+                        const val = dataArr[i];
+                        if (isNaN(val)) continue;
+                        const x = getX(i, len);
+                        const y = getY(val);
+                        ctx.beginPath();
+                        ctx.fillStyle = color;
+                        ctx.arc(x, y, 3, 0, 2 * Math.PI);
+                        ctx.fill();
+                        ctx.fillStyle = "white";
+                        ctx.beginPath();
+                        ctx.arc(x, y, 1.5, 0, 2 * Math.PI);
+                        ctx.fill();
+                    }
+                }
+            }
+            ctx.restore();
+        }
+
+        function addPoint(lineIdx, value) {
+            if (!allData[lineIdx]) allData[lineIdx] = [];
+            const arr = allData[lineIdx];
+            arr.push(value);
+            while (arr.length > xMax) arr.shift();
+        }
+
+        function processNumbers(ints) {
+            if (!ints.length) return;
+            if (ints.length < allData.length) allData.length = ints.length;
+            let maxAbs = 0;
+            for (let i = 0; i < ints.length; i++) {
+                const v = ints[i];
+                if (isNaN(v)) continue;
+                addPoint(i, v);
+                if (Math.abs(v) > maxAbs) maxAbs = Math.abs(v);
+            }
+            if (autoSize && maxAbs > 0) {
+                let target_max = mx_inner(allData);
+                let target_min = mn_inner(allData);
+                let target = max(target_max, abs(target_min));
+                if (target < 5) target = 20;
+                yMax = target;
+                $("#ymaxtext").val(yMax);
+            }
+            drawPlotter();
+        }
+
+        let monitorLines = [];
+        let updateTimer = null;
+        
+        function addMonitorText(data) {
+            let prefix = autoShowTime ? `[${new Date().toLocaleTimeString("ru")}.${new Date().getMilliseconds()}] ` : "";
+            let suffix = autoNewLine ? "\n" : "";
+            const fullLine = prefix + data + suffix;
+            monitorLines.push(fullLine);
+            while (monitorLines.length > mxLines) monitorLines.shift();
+            
+            // Оптимизированное обновление textarea
+            if (updateTimer) clearTimeout(updateTimer);
+            updateTimer = setTimeout(() => {
+                $("#port").val(monitorLines.join(''));
+                if (autoScroll) {
+                    const textarea = document.getElementById("port");
+                    textarea.scrollTop = textarea.scrollHeight;
+                }
+            }, 20);
+        }
+
+        async function checkExistingPort() {
+            try {
+                if (!navigator.serial) return;
+                const ports = await navigator.serial.getPorts();
+                for (const port of ports) {
+                    try {
+                        if (port.readable || port.writable) {
+                            if (port.readable) { const reader = port.readable.getReader(); await reader.cancel(); reader.releaseLock(); }
+                            await port.close();
+                        }
+                    } catch (e) {}
+                }
+            } catch (err) {}
+        }
+
+        async function disconnectSerial(manual = true) {
+            if (isClosing && manual) return;
+            if (!manual && !connected) return;
+            if (!manual && !disconnectOnBlur) return;
+            isClosing = true;
+            readingEnabled = false;
+            readingLoopActive = false;
+            if (currentReader) { try { await currentReader.cancel(); } catch(e) {} try { currentReader.releaseLock(); } catch(e) {} currentReader = null; }
+            if (window.port) {
+                try {
+                    if (window.port.readable) { const reader = window.port.readable.getReader(); try { await reader.cancel(); } catch(e) {} try { reader.releaseLock(); } catch(e) {} }
+                    await window.port.close();
+                } catch(e) {}
+                window.port = null;
+            }
+            connected = false;
+            isClosing = false;
+            updateUI();
+        }
+
+        window.addEventListener('beforeunload', async () => {
+            isClosing = true; readingEnabled = false;
+            if (currentReader) { try { await currentReader.cancel(); currentReader.releaseLock(); } catch(e) {} currentReader = null; }
+            if (window.port) {
+                try { if (window.port.readable) { const reader = window.port.readable.getReader(); await reader.cancel(); reader.releaseLock(); } await window.port.close(); } catch(e) {}
+                window.port = null;
+            }
+        });
+
+        function handleWindowBlur() { if (connected && disconnectOnBlur && !isClosing) disconnectSerial(false); }
+        window.addEventListener('blur', handleWindowBlur);
+
+        async function startReadingLoop() {
+            if (!connected || readingLoopActive || isClosing) return;
+            if (!window.port?.readable) return;
+            readingLoopActive = true;
+            if (currentReader) { try { await currentReader.cancel(); } catch(e) {} currentReader = null; }
+            
+            while (connected && window.port?.readable && !isClosing && !window.closed) {
+                try {
+                    currentReader = window.port.readable.getReader();
+                    while (connected && !isClosing && !window.closed) {
+                        try {
+                            const { value, done } = await currentReader.read();
+                            if (done) break;
+                            if (readingEnabled && !isClosing) {
+                                buffer += new TextDecoder().decode(value);
+                                const lines = buffer.split('\n');
+                                buffer = lines.pop() || '';
+                                for (let line of lines) {
+                                    line = line.replace('\r', '').trim();
+                                    if (line === "") continue;
+                                    const nums = line.match(/-?\d+/g);
+                                    if (nums && nums.length) processNumbers(nums.map(Number));
+                                    addMonitorText(line);
+                                }
+                            }
+                        } catch (readErr) { break; }
+                    }
+                } catch (err) { await new Promise(r => setTimeout(r, 50)); }
+                finally { if (currentReader) { try { currentReader.releaseLock(); } catch(e) {} currentReader = null; } }
+                if (connected && (!window.port || !window.port.readable)) break;
+            }
+            readingLoopActive = false;
+        }
+
+        async function connectSerial() {
+            if (isClosing) return;
+            try {
+                if (window.port) await disconnectSerial(true);
+                window.port = await navigator.serial.requestPort();
+                await window.port.open({ baudRate: parseInt($("#baudRate").val()) });
+                connected = true; isClosing = false; updateUI(); readingEnabled = true; readingLoopActive = false;
+                $(".stopRead, .stopReadGlobal, .stopReadMonitor").html('<i class="fas fa-pause text-xs"></i> Пауза');
+                allData = []; monitorLines = []; $("#port").val(''); drawPlotter();
+                setTimeout(() => startReadingLoop(), 50);
+            } catch (err) { alert("Ошибка: " + err.message); connected = false; updateUI(); }
+        }
+
+        async function writeSerial(msg) {
+            if (!window.port?.writable || isClosing) return;
+            const writer = window.port.writable.getWriter();
+            try { await writer.write(new TextEncoder().encode(msg)); if (showUserMessages) addMonitorText("> " + msg); } 
+            catch(e) {} 
+            finally { writer.releaseLock(); }
+        }
+
+        function updateUI() {
+            if (connected && !isClosing) {
+                $("#status").html('<i class="fas fa-circle text-[6px] text-green-400"></i> <span>Подключено</span>');
+                const info = window.port.getInfo?.() || {};
+                $("#connectInfo").html(`✅ Подключено | ${$("#baudRate").val()} бод | VID:${info.usbVendorId || '?'} PID:${info.usbProductId || '?'}`);
+                $("#ctrlBtn").html('<i class="fas fa-unlink text-xs"></i> Отключить');
+            } else {
+                $("#status").html('<i class="fas fa-circle text-[6px] text-red-400"></i> <span>Отключено</span>');
+                $("#connectInfo").html("⚡ Выберите порт и нажмите Подключить");
+                $("#ctrlBtn").html('<i class="fas fa-plug text-xs"></i> Подключить');
+            }
+        }
+
+        function findNearestVertex(mouseX, mouseY) {
+            const RADIUS = 8;
+            let bestDist = RADIUS + 1, best = null;
+            for (let lineIdx = 0; lineIdx < allData.length; lineIdx++) {
+                const arr = allData[lineIdx];
+                if (!arr) continue;
+                for (let i = 0; i < arr.length; i++) {
+                    const val = arr[i];
+                    if (isNaN(val)) continue;
+                    const px = getX(i, arr.length), py = getY(val);
+                    const dist = Math.hypot(mouseX - px, mouseY - py);
+                    if (dist < bestDist) {
+                        bestDist = dist;
+                        best = { line: lineIdx, value: val, lastValue: arr[arr.length-1], color: colors[lineIdx % colors.length] };
+                    }
+                }
+            }
+            return best;
+        }
+
+        function onCanvasMove(e) {
+            if (!isPlotter) { tooltipDiv.classList.add('hidden'); return; }
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width, scaleY = canvas.height / rect.height;
+            const mouseX = (e.clientX - rect.left) * scaleX, mouseY = (e.clientY - rect.top) * scaleY;
+            const vertex = findNearestVertex(mouseX, mouseY);
+            if (vertex) {
+                tooltipDiv.innerHTML = `<span style="color:${vertex.color};">●</span> Линия ${vertex.line+1}<br>${vertex.value} (посл. ${vertex.lastValue})`;
+                tooltipDiv.style.borderLeftColor = vertex.color;
+                tooltipDiv.classList.remove('hidden');
+                let left = e.clientX + 12, top = e.clientY - 30;
+                if (left + 180 > window.innerWidth) left = e.clientX - 190;
+                if (top < 10) top = e.clientY + 15;
+                tooltipDiv.style.left = left + 'px'; tooltipDiv.style.top = top + 'px';
+            } else { tooltipDiv.classList.add('hidden'); }
+        }
+        function onCanvasLeave() { tooltipDiv.classList.add('hidden'); }
+        canvas.addEventListener('mousemove', onCanvasMove);
+        canvas.addEventListener('mouseleave', onCanvasLeave);
+
+        // Тема
+        function initTheme() {
+            const isDark = localStorage.getItem('theme') === 'dark' || (!localStorage.getItem('theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+            if (isDark) {
+                document.documentElement.classList.add('dark');
+                document.body.classList.add('dark');
+                document.body.classList.remove('light');
+                $('#themeIcon').removeClass('fa-sun').addClass('fa-moon');
+            } else {
+                document.documentElement.classList.add('light');
+                document.body.classList.add('light');
+                document.body.classList.remove('dark');
+                $('#themeIcon').removeClass('fa-moon').addClass('fa-sun');
+            }
+        }
+        
+        $('#themeToggle').click(() => {
+            if (document.documentElement.classList.contains('dark')) {
+                document.documentElement.classList.remove('dark');
+                document.documentElement.classList.add('light');
+                document.body.classList.remove('dark');
+                document.body.classList.add('light');
+                localStorage.setItem('theme', 'light');
+                $('#themeIcon').removeClass('fa-moon').addClass('fa-sun');
+            } else {
+                document.documentElement.classList.remove('light');
+                document.documentElement.classList.add('dark');
+                document.body.classList.remove('light');
+                document.body.classList.add('dark');
+                localStorage.setItem('theme', 'dark');
+                $('#themeIcon').removeClass('fa-sun').addClass('fa-moon');
+            }
+            drawPlotter();
+        });
+
+        $(function () {
+            initTheme();
+            checkExistingPort();
+            setTimeout(resizeCanvas, 100);
+            
+            $("#xmaxtext").val(xMax); $("#ymaxtext").val(yMax); $("#mxlines").val(mxLines);
+            $("#autosize").prop("checked", autoSize); $("#showdots").prop("checked", showDots); 
+            $("#onlyCirclesMode").prop("checked", onlyCirclesMode);
+            $("#disconnectOnBlur").prop("checked", false);
+            
+            $("#onlyCirclesMode").change(function(e) {
+                onlyCirclesMode = e.target.checked;
+                if (onlyCirclesMode) { if (!$("#showdots").prop("checked")) { $("#showdots").prop("checked", true); showDots = true; } $("#showdots").prop("disabled", true); }
+                else { $("#showdots").prop("disabled", false); }
+                drawPlotter();
+            });
+            $("#showdots").change(function(e) { if (onlyCirclesMode) { $(this).prop("checked", true); return; } showDots = e.target.checked; drawPlotter(); });
+            $("#ctrlBtn").click(async () => { if (connected && !isClosing) await disconnectSerial(true); else await connectSerial(); });
+            $("#sendMessage").click(async () => {
+                let suf = "";
+                const mode = $("#addToMsg").val();
+                if (mode === "Новая строка (\\n)") suf = "\n";
+                else if (mode === "Возврат каретки (\\r)") suf = "\r";
+                else if (mode === "Новая строка и возврат каретки (\\r\\n)") suf = "\r\n";
+                await writeSerial($("#message").val() + suf);
+                $("#message").val("");
+            });
+            $("#clsMessage").click(() => $("#message").val(""));
+            $("#autosize").change(e => { autoSize = e.target.checked; if (!autoSize) { xMax = parseInt($("#xmaxtext").val()) || 120; yMax = parseInt($("#ymaxtext").val()) || 2048; drawPlotter(); } });
+            $("#xmaxtext, #ymaxtext").change(() => { if (!autoSize) { xMax = parseInt($("#xmaxtext").val()) || 120; yMax = parseInt($("#ymaxtext").val()) || 2048; drawPlotter(); } });
+            $("#autoscroll").change(e => autoScroll = e.target.checked);
+            $("#autoshowtime").change(e => autoShowTime = e.target.checked);
+            $("#autonewline").change(e => autoNewLine = e.target.checked);
+            $("#showusermessages").change(e => showUserMessages = e.target.checked);
+            $("#mxlines").change(e => { mxLines = Math.max(10, parseInt(e.target.value) || 100); while (monitorLines.length > mxLines) monitorLines.shift(); $("#port").val(monitorLines.join('')); });
+            $("#disconnectOnBlur").change(e => { disconnectOnBlur = e.target.checked; if (disconnectOnBlur && !document.hasFocus() && connected && !isClosing) disconnectSerial(false); });
+            
+            // Переключение табов с корректной темой
+            $(".monPortTab").click(function(e) {
+                e.preventDefault();
+                $("#plotter").hide();
+                $("#monport").show();
+                isPlotter = false;
+                
+                // Стили для активного таба (Монитор порта)
+                $(".plotterTab").removeClass("dark:bg-blue-600 bg-blue-500 dark:text-white text-white shadow-md")
+                                .addClass("dark:bg-slate-700 dark:text-slate-300 bg-slate-200 text-slate-600");
+                $(this).removeClass("dark:bg-slate-700 dark:text-slate-300 bg-slate-200 text-slate-600")
+                    .addClass("dark:bg-blue-600 bg-blue-500 dark:text-white text-white shadow-md");
+            });
+
+            $(".plotterTab").click(function(e) {
+                e.preventDefault();
+                $("#plotter").show();
+                $("#monport").hide();
+                isPlotter = true;
+                drawPlotter();
+                
+                // Стили для активного таба (Плоттер)
+                $(".monPortTab").removeClass("dark:bg-blue-600 bg-blue-500 dark:text-white text-white shadow-md")
+                                .addClass("dark:bg-slate-700 dark:text-slate-300 bg-slate-200 text-slate-600");
+                $(this).removeClass("dark:bg-slate-700 dark:text-slate-300 bg-slate-200 text-slate-600")
+                    .addClass("dark:bg-blue-600 bg-blue-500 dark:text-white text-white shadow-md");
+            });
+            
+            updateUI();
+        });
+    </script>
+</body>
+
+</html>
