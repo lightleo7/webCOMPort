@@ -183,6 +183,13 @@
         let readingLoopActive = false;
         let isClosing = false;
 
+        function max(a, b) {
+            return a > b ? a : b;
+        }
+        function abs(a) {
+            return a < 0 ? -a : a;
+        }
+
         function mx_inner(massiv) {
             let mx = massiv[0][0];
             massiv.forEach((out) => {
@@ -191,6 +198,17 @@
                 });
             });
             return mx;
+        }
+
+
+        function mn_inner(massiv) {
+            let mn = massiv[0][0];
+            massiv.forEach((out) => {
+                out.forEach((inn) => {
+                    if (inn < mn) mn = inn;
+                });
+            });
+            return mn;
         }
         
         const canvas = document.getElementById('canvas');
@@ -310,7 +328,9 @@
                 if (Math.abs(v) > maxAbs) maxAbs = Math.abs(v);
             }
             if (autoSize && maxAbs > 0) {
-                let target = mx_inner(allData);
+                let target_max = mx_inner(allData);
+                let target_min = mn_inner(allData);
+                let target = max(target_max, abs(target_min));
                 if (target < 5) target = 20;
                 yMax = target;
                 $("#ymaxtext").val(yMax);
